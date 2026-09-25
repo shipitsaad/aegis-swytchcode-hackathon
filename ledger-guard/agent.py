@@ -16,6 +16,7 @@ from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
 
 from tools import ALL_TOOLS, notion_log_case as _notion_log_case_tool
+from tools import _DRY_RUN
 
 load_dotenv()
 
@@ -179,14 +180,20 @@ def _infer_status(content: str) -> str:
     return "success"
 
 
-def run_agent_structured(complaint: str) -> dict:
+def run_agent_structured(complaint: str, dry_run: bool = False) -> dict:
     """Run one complaint through the real Aegis agent (same LangGraph + Groq agent as
     handle_complaint) and return the full execution trace as data instead of printing it -
     this is what the web UI calls, so what it shows is the actual live agent, never a
     canned/scripted replay.
+
+    If `dry_run` is True, every tool that would move money, post to Slack, or write to
+    Notion instead returns a "here's what I would have done" description - no live calls,
+    no side effects, using Swytchcode's own real `--dry-run` flag underneath. The agent
+    itself has no idea dry-run is on; it reasons and decides exactly the same way.
     """
     agent = build_agent()
     start = time.time()
+    dry_run_token = _DRY_RUN.set(dry_run)
 
     def elapsed() -> str:
         return f"{time.time() - start:.2f}s"
@@ -297,6 +304,8 @@ def run_agent_structured(complaint: str) -> dict:
                 "status": status,
             }
 
+    _DRY_RUN.reset(dry_run_token)
+
     return {
         "steps": steps,
         "final_reasoning": final_reasoning,
@@ -305,6 +314,7 @@ def run_agent_structured(complaint: str) -> dict:
         "case_id": case_id,
         "slack_text": slack_text,
         "notion_row": notion_row,
+        "dry_run": dry_run,
     }
 
 

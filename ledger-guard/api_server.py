@@ -14,14 +14,22 @@ app = Flask(__name__)
 CORS(app)  # local dev only - the web UI runs on a different port (3000 vs 5001)
 
 
+@app.route("/health", methods=["GET"])
+def health():
+    """Cheap liveness check for the web UI - never touches the agent or Groq's API,
+    so refreshing the page doesn't burn tokens just to check the server is up."""
+    return jsonify({"status": "ok"})
+
+
 @app.route("/run", methods=["POST"])
 def run():
     data = request.get_json(force=True, silent=True) or {}
     complaint = (data.get("prompt") or "").strip()
+    dry_run = bool(data.get("dry_run", False))
     if not complaint:
         return jsonify({"error": "prompt is required"}), 400
     try:
-        return jsonify(run_agent_structured(complaint))
+        return jsonify(run_agent_structured(complaint, dry_run=dry_run))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

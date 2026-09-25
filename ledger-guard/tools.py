@@ -9,6 +9,7 @@ Each function is decorated with @tool so LangGraph can hand it to the LLM direct
 the docstring becomes the tool's description, and the type hints become its schema.
 """
 
+import contextvars
 import json
 import os
 import ssl
@@ -19,6 +20,13 @@ import urllib.request
 import certifi
 from dotenv import load_dotenv
 from langchain_core.tools import tool
+
+# Dry-run guardrail: set for the duration of one agent run (see agent.py's
+# run_agent_structured) so every `swy exec` call in that run passes Swytchcode's own
+# real `--dry-run` flag ("show what would be executed without making the HTTP call") -
+# not something we invented client-side. A contextvar (not a plain global) so concurrent
+# Flask requests in different threads never leak dry-run state into each other.
+_DRY_RUN = contextvars.ContextVar("aegis_dry_run", default=False)
 
 # macOS's python.org builds don't wire up certificate verification by default,
 # which makes urllib fail with CERTIFICATE_VERIFY_FAILED. Use certifi's bundle instead.
@@ -44,6 +52,8 @@ def run_swy(canonical_id: str, payload: dict, extra_args: list[str] | None = Non
     Raises RuntimeError with a readable message on failure (any exit code != 0).
     """
     cmd = [SWYTCHCODE_BIN, "exec", canonical_id, "--json"]
+    if _DRY_RUN.get():
+        cmd.append("--dry-run")
     if extra_args:
         cmd.extend(extra_args)
 
@@ -215,6 +225,16 @@ def paypal_refund_capture(capture_id: str, amount: float | None = None, note: st
     This is a real, guarded financial action - only use it when the case genuinely
     warrants a refund (verified duplicate charge or confirmed error), never speculatively.
     """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "payments.payment.captures.refund",
+                "capture_id": capture_id,
+                "amount": amount,
+                "note": "No real refund issued - dry-run mode. This is what would happen.",
+            }
+        )
     if capture_id in _TEST_OVERRIDES:  # temporary dev-only stub, see paypal_lookup_capture
         return json.dumps({"id": f"TEST-REFUND-{capture_id}", "status": "COMPLETED"})
 
@@ -295,6 +315,15 @@ def paypal_accept_dispute(dispute_id: str) -> str:
     business's account - only call this when the dispute is clearly legitimate and
     low-risk to resolve without a human.
     """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "disputes.customer.acceptClaim.create",
+                "dispute_id": dispute_id,
+                "note": "No dispute actually accepted - dry-run mode. This is what would happen.",
+            }
+        )
     if dispute_id in _DISPUTE_TEST_OVERRIDES:
         return json.dumps(
             {"dispute_id": dispute_id, "status": "RESOLVED", "outcome": "RESOLVED_BUYER_FAVOUR"}
@@ -313,6 +342,16 @@ def paypal_offer_dispute_settlement(dispute_id: str, amount: float, note: str) -
     ground between accepting outright and escalating to a human. Only works while the
     dispute is still in its early "INQUIRY" stage.
     """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "disputes.customer.makeOffer.create",
+                "dispute_id": dispute_id,
+                "offer_amount": amount,
+                "note": "No offer actually sent - dry-run mode. This is what would happen.",
+            }
+        )
     if dispute_id in _DISPUTE_TEST_OVERRIDES:
         return json.dumps({"dispute_id": dispute_id, "status": "OFFER_MADE", "offer_amount": amount})
     body = {
@@ -340,6 +379,15 @@ def slack_notify(text: str) -> str:
     """Post a message to the team's Slack channel - use this to notify the team about
     an escalation, a large refund, or anything a human should know about.
     """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "slack.chat.postmessage.create",
+                "text": text,
+                "note": "No real Slack message sent - dry-run mode.",
+            }
+        )
     payload = {
         "token": "placeholder",  # required by validation, value is unused (F26)
         "body": {"channel": SLACK_CHANNEL_ID, "text": text},
@@ -366,6 +414,22 @@ def notion_log_case(
     `decision` must be one of: "Refunded", "Denied", "Escalated".
     `status` must be one of: "Open", "Resolved".
     """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "notion.page.create",
+                "case_id": case_id,
+                "amount": amount,
+                "decision": decision,
+                "reasoning": reasoning,
+                "status": status,
+                "note": (
+                    "No real Notion row created, and nothing was added to Leak Radar's "
+                    "history - dry-run mode."
+                ),
+            }
+        )
     # Recorded regardless of whether the Notion call below succeeds - Leak Radar's
     # pattern detection must not depend on Notion's API being up.
     _append_case_history(

@@ -655,6 +655,7 @@ export default function ConsolePage() {
   const [selectedScenario, setSelectedScenario] = useState<DemoScenario>(PRESET_SCENARIOS[0]);
   const [customPrompt, setCustomPrompt] = useState<string>(PRESET_SCENARIOS[0].prompt);
   const [isRunning, setIsRunning] = useState<boolean>(false);
+  const [dryRun, setDryRun] = useState<boolean>(false);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<"stream" | "payloads">("stream");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -678,19 +679,12 @@ export default function ConsolePage() {
     captureInfo: "TEST-SMALL · $45.00 · COMPLETED",
   });
 
-  // Check if local python api_server.py is running on port 5001
+  // Check if local python api_server.py is running on port 5001 - hits /health, never
+  // /run, so refreshing this page doesn't burn real Groq tokens just to check liveness.
   useEffect(() => {
-    fetch("http://localhost:5001/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "ping" }),
-    })
-      .then((res) => {
-        setBackendOnline(res.ok || res.status === 400 || res.status === 200);
-      })
-      .catch(() => {
-        setBackendOnline(false);
-      });
+    fetch("http://localhost:5001/health")
+      .then((res) => setBackendOnline(res.ok))
+      .catch(() => setBackendOnline(false));
   }, []);
 
   const handleSelectPreset = (scenario: DemoScenario) => {
@@ -716,7 +710,7 @@ export default function ConsolePage() {
       const response = await fetch("http://localhost:5001/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText }),
+        body: JSON.stringify({ prompt: promptText, dry_run: dryRun }),
       });
 
       if (response.ok) {
@@ -1045,6 +1039,42 @@ export default function ConsolePage() {
               placeholder="Paste dispute email or type custom instructions..."
             />
 
+            {/* Dry-Run Guardrail Toggle - uses Swytchcode's real `--dry-run` CLI flag,
+                not a client-side fake: no PayPal refund, Slack post, or Notion write
+                actually happens while this is on, but the agent reasons identically. */}
+            <button
+              onClick={() => setDryRun((v) => !v)}
+              disabled={isRunning}
+              className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-all shrink-0 cursor-pointer ${
+                dryRun
+                  ? "bg-amber-500/10 border-amber-500/40 text-amber-300"
+                  : "bg-[#050506] border-white/[0.08] text-[#8A8F98] hover:border-white/[0.15]"
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Lock className={`w-3 h-3 ${dryRun ? "text-amber-400" : "text-[#8A8F98]"}`} />
+                Dry-Run Guardrail
+              </span>
+              <span
+                className={`w-7 h-4 rounded-full relative transition-colors ${
+                  dryRun ? "bg-amber-500/60" : "bg-white/[0.12]"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${
+                    dryRun ? "left-3.5" : "left-0.5"
+                  }`}
+                />
+              </span>
+            </button>
+
+            {dryRun && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-mono shrink-0">
+                <ShieldCheck className="w-3 h-3" />
+                No real PayPal refund, Slack message, or Notion write will happen this run.
+              </div>
+            )}
+
             <div className="flex items-center justify-between pt-1 shrink-0">
               <button
                 onClick={() => setCustomPrompt("")}
@@ -1058,7 +1088,11 @@ export default function ConsolePage() {
               <button
                 onClick={() => executePrompt(customPrompt)}
                 disabled={isRunning}
-                className="btn-linear-primary px-3.5 py-1.5 text-xs font-medium tracking-tight flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(94,106,210,0.4)]"
+                className={`px-3.5 py-1.5 text-xs font-medium tracking-tight flex items-center gap-1.5 cursor-pointer ${
+                  dryRun
+                    ? "rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                    : "btn-linear-primary shadow-[0_0_15px_rgba(94,106,210,0.4)]"
+                }`}
               >
                 {isRunning ? (
                   <>
@@ -1067,8 +1101,8 @@ export default function ConsolePage() {
                   </>
                 ) : (
                   <>
-                    <Play className="w-3 h-3 fill-white" />
-                    Execute Flow
+                    <Play className="w-3 h-3 fill-current" />
+                    {dryRun ? "Execute Flow (Dry-Run)" : "Execute Flow"}
                   </>
                 )}
               </button>
