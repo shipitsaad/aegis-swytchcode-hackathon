@@ -68,7 +68,7 @@ export default function Hero() {
 
           <div className="visual-chip bg-emerald-500/10 border border-emerald-500/25 text-emerald-300">
             <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>&lt;$200 Hard Limit</span>
+            <span>Judgment-Based Policy</span>
           </div>
 
           <div className="visual-chip bg-amber-500/10 border border-amber-500/25 text-amber-300">
