@@ -5,10 +5,15 @@ real Swytchcode tool calls in tools.py, exactly like `python agent.py "..."` doe
 command line, just returned as JSON instead of printed.
 """
 
+import json
+import os
+import subprocess
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from agent import run_agent_structured
+from tools import SWYTCHCODE_BIN
 
 app = Flask(__name__)
 CORS(app)  # local dev only - the web UI runs on a different port (3000 vs 5001)
@@ -19,6 +24,41 @@ def health():
     """Cheap liveness check for the web UI - never touches the agent or Groq's API,
     so refreshing the page doesn't burn tokens just to check the server is up."""
     return jsonify({"status": "ok"})
+
+
+@app.route("/audit", methods=["GET"])
+def audit():
+    """Real audit trail from Swytchcode's own local log (~/.swytchcode/audit/) - every
+    outbound network call our tools actually made, with real host/status/duration. This
+    is Swytchcode's own guardrail feature, not something we built ourselves; we just
+    surface it in the UI. Read-only, makes no Groq or Swytchcode calls itself.
+    """
+    try:
+        result = subprocess.run(
+            [SWYTCHCODE_BIN, "audit", "network", "--json", "-n", "30"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env={k: v for k, v in os.environ.items() if k != "SWYTCHCODE_BIN"},
+        )
+        calls = []
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line:
+                calls.append(json.loads(line))
+
+        total = len(calls)
+        successes = sum(1 for c in calls if 200 <= c.get("status", 0) < 300)
+        return jsonify(
+            {
+                "calls": calls,
+                "total": total,
+                "successes": successes,
+                "success_rate": round(100 * successes / total) if total else None,
+            }
+        )
+    except Exception as e:
+        return jsonify({"error": str(e), "calls": [], "total": 0, "successes": 0, "success_rate": None}), 500
 
 
 @app.route("/run", methods=["POST"])
