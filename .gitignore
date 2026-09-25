@@ -1,0 +1,19 @@
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Claude Code's own internal session state, not project content
+.claude/
+
+# Belt-and-braces on top of ledger-guard/.gitignore and web/.gitignore -
+# never let secrets, deps, or generated build output slip into a commit.
+**/.env
+**/.env.local
+**/.venv/
+**/node_modules/
+**/.next/
+**/.swytchcode/
+**/__pycache__/
+**/*.pyc
+**/case_history.json
+**/*.bak*

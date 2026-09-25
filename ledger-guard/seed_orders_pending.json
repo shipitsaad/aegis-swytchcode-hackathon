@@ -1,0 +1,14 @@
+[
+  {
+    "label": "small_verified_duplicate",
+    "amount": "45.00",
+    "order_id": "4Y268280X81544638",
+    "approve_link": "https://www.sandbox.paypal.com/checkoutnow?token=4Y268280X81544638"
+  },
+  {
+    "label": "large_risky_amount",
+    "amount": "350.00",
+    "order_id": "16T43672PJ0797229",
+    "approve_link": "https://www.sandbox.paypal.com/checkoutnow?token=16T43672PJ0797229"
+  }
+]

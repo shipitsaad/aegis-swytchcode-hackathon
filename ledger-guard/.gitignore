@@ -1,0 +1,9 @@
+.swytchcode/
+.venv/
+__pycache__/
+*.pyc
+.env
+*.bak
+*.bak2
+*.bak3
+case_history.json
