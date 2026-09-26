@@ -79,42 +79,33 @@ export default function DemoStoryPage() {
             <span className="w-5 h-5 rounded-md bg-[#E23744] text-white flex items-center justify-center font-black text-[11px] shadow-xs">
               T
             </span>
-            <div className="leading-tight">
-              <div className="font-semibold text-xs sm:text-sm tracking-tight text-[#16171B] flex items-center gap-2">
-                <span>The Story of a Dispute</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-50 text-[#E23744] border border-red-200 inline-flex items-center gap-1">
-                  <span>Consumer App</span>
-                  <ArrowRight className="w-2.5 h-2.5 inline" />
-                  <span>Aegis Defense</span>
-                </span>
-              </div>
-            </div>
+            <span className="font-bold text-xs sm:text-sm tracking-tight text-[#16171B]">
+              Tomato Dispute Story
+            </span>
           </div>
         </div>
 
-        {/* Feature 2: Multi-Scenario Switcher Bar */}
-        <div className="hidden md:flex items-center gap-1 bg-[#F3F4F6] p-1 rounded-xl border border-[#E5E7EB]">
-          <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider px-2">
-            Scenario:
-          </span>
+        {/* Minimalist Scenario Segmented Control */}
+        <div className="hidden md:flex items-center bg-[#F1F2F5] p-1 rounded-xl border border-[#E2E4E9]">
           {DISPUTE_SCENARIOS.map((sc) => {
             const isSelected = sc.id === selectedScenarioId;
+            const labelMap: Record<string, string> = {
+              standard: "Normal (₹45)",
+              bot_attack: "Bot Attack",
+              high_value: "High Value (₹2.5k)",
+            };
             return (
               <button
                 key={sc.id}
                 onClick={() => handleSelectScenario(sc.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   isSelected
-                    ? "bg-white text-[#16171B] shadow-xs border border-[#E5E7EB]"
-                    : "text-[#6B7280] hover:text-[#16171B] hover:bg-white/50"
+                    ? "bg-white text-[#16171B] shadow-xs"
+                    : "text-[#6B7280] hover:text-[#16171B]"
                 }`}
                 title={sc.subtitle}
               >
-                <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${sc.badgeColor}`}>
-                  {sc.badge}
-                </span>
-                <span className="font-semibold">{sc.title}</span>
-                <span className="font-mono text-[10px] text-[#5E6AD2]">({sc.amount})</span>
+                {labelMap[sc.id] || sc.title}
               </button>
             );
           })}
@@ -202,7 +193,11 @@ export default function DemoStoryPage() {
               <span>Zomato Parody App</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#16171B]">
-              "I ordered food, it failed, but I got charged."
+              {selectedScenarioId === "bot_attack"
+                ? "Rapid retry dispute detected by Swytchcode Leak Radar."
+                : selectedScenarioId === "high_value"
+                ? "High-ticket catering charge exceeding safety ceiling."
+                : '"I ordered food, it failed, but I got charged."'}
             </h1>
             <p className="text-xs text-[#6B7280] max-w-sm mx-auto leading-tight">
               Tap <strong className="text-[#0070BA]">Pay via PayPal</strong> on the phone to experience the payment deduction, order glitch, and dispute hand-off.
