@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Shield, Terminal, Zap, Layers, Menu, X, ArrowRight } from "lucide-react";
+import { Shield, Terminal, Zap, Layers, Menu, X, ArrowRight, Sparkles } from "lucide-react";
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -37,7 +37,14 @@ export default function Navbar() {
         </Link>
 
         {/* Center Nav Links */}
-        <div className="hidden md:flex items-center gap-7 text-sm text-[#8A8F98]">
+        <div className="hidden md:flex items-center gap-6 text-sm text-[#8A8F98]">
+          <Link
+            href="/demo"
+            className="text-red-300 hover:text-white transition-colors flex items-center gap-1.5 font-medium px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 text-xs"
+          >
+            <Sparkles className="w-3 h-3 text-red-400" />
+            <span>Live Story</span>
+          </Link>
           <Link
             href="/console"
             className="text-[#EDEDEF] hover:text-white transition-colors flex items-center gap-1.5 font-medium"
@@ -45,12 +52,6 @@ export default function Navbar() {
             <Terminal className="w-3.5 h-3.5 text-[#5E6AD2]" />
             Operations Console
           </Link>
-          <button
-            onClick={() => scrollTo("pipeline")}
-            className="hover:text-[#EDEDEF] transition-colors cursor-pointer"
-          >
-            Pipeline
-          </button>
           <button
             onClick={() => scrollTo("guardrails")}
             className="hover:text-[#EDEDEF] transition-colors cursor-pointer"
@@ -69,7 +70,7 @@ export default function Navbar() {
             className="hover:text-[#EDEDEF] transition-colors cursor-pointer flex items-center gap-1.5"
           >
             <Layers className="w-3.5 h-3.5 text-[#8A8F98]" />
-            Architecture
+            How It Works
           </button>
         </div>
 
@@ -105,18 +106,20 @@ export default function Navbar() {
       {mobileMenuOpen && (
         <div className="md:hidden border-b border-white/[0.06] bg-[#050506]/95 backdrop-blur-2xl px-4 py-4 space-y-3 text-sm text-[#8A8F98]">
           <Link
+            href="/demo"
+            className="block w-full text-left py-1.5 text-red-400 font-medium flex items-center gap-1.5"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-red-400" />
+            <span>Live Story Demo</span>
+          </Link>
+          <Link
             href="/console"
             className="block w-full text-left py-1.5 text-[#EDEDEF] font-medium"
             onClick={() => setMobileMenuOpen(false)}
           >
             Operations Console
           </Link>
-          <button
-            onClick={() => scrollTo("pipeline")}
-            className="block w-full text-left py-1.5 hover:text-white"
-          >
-            Pipeline
-          </button>
           <button
             onClick={() => scrollTo("guardrails")}
             className="block w-full text-left py-1.5 hover:text-white"
@@ -133,7 +136,7 @@ export default function Navbar() {
             onClick={() => scrollTo("architecture")}
             className="block w-full text-left py-1.5 hover:text-white"
           >
-            Architecture
+            How It Works
           </button>
           <div className="pt-2">
             <Link

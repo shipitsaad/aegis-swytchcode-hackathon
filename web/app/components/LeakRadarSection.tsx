@@ -15,7 +15,7 @@ import {
 
 export default function LeakRadarSection() {
   return (
-    <section id="leak-radar" className="py-20 relative z-10 border-t border-white/[0.06]">
+    <section id="leak-radar" className="py-14 relative z-10 border-t border-white/[0.06]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           {/* Left Column (6 Cols): Visual Logic & Explanations */}
@@ -101,21 +101,21 @@ export default function LeakRadarSection() {
               <div className="absolute top-20 right-24 z-20 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
                 <span className="text-[10px] font-mono text-[#EDEDEF] bg-[#0a0a0c] px-2 py-0.5 rounded-md border border-amber-500/30">
-                  $45 · user_01
+                  ₹45 · user_01
                 </span>
               </div>
 
               <div className="absolute top-32 right-14 z-20 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
                 <span className="text-[10px] font-mono text-[#EDEDEF] bg-[#0a0a0c] px-2 py-0.5 rounded-md border border-amber-500/30">
-                  $45 · user_02
+                  ₹45 · user_02
                 </span>
               </div>
 
               <div className="absolute bottom-24 right-28 z-20 flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-red-400 shadow-[0_0_12px_rgba(248,113,113,0.9)] animate-ping" />
                 <span className="text-[10px] font-mono text-red-200 bg-red-950/90 px-2 py-0.5 rounded-md border border-red-500/50 shadow-lg">
-                  $45 · user_03 [Cluster Alert]
+                  ₹45 · user_03 [Cluster Alert]
                 </span>
               </div>
 

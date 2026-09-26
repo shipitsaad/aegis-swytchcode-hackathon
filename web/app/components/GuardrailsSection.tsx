@@ -1,65 +1,9 @@
 "use client";
 
 import React from "react";
-import {
-  ShieldCheck,
-  Lock,
-  RefreshCw,
-  Cpu,
-  Database,
-  Check,
-  X,
-  AlertTriangle,
-  Flame,
-  CheckCircle2,
-  XCircle,
-  Key,
-} from "lucide-react";
+import { ShieldCheck, Check, X, CheckCircle2, XCircle } from "lucide-react";
 
 export default function GuardrailsSection() {
-  const guardrails = [
-    {
-      title: "Dynamic Idempotency Lock",
-      subtitle: "Prevents duplicate actions on retry",
-      icon: RefreshCw,
-      color: "text-blue-400 bg-blue-500/10 border-blue-500/25",
-      glow: "hover:border-blue-500/35",
-      description:
-        "When an API request experiences a network timeout, naive agents retry and execute multiple refunds. Aegis configures Swytchcode dynamic idempotency, ensuring identical refund calls are deduplicated at the gateway.",
-      proof: 'SHA256(capture_id + amount) deduplication key',
-    },
-    {
-      title: "Programmatic Policy Ceilings",
-      subtitle: "Hard financial boundary at $200",
-      icon: Lock,
-      color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/25",
-      glow: "hover:border-emerald-500/35",
-      description:
-        "The agent cannot execute payouts or refunds over $200. Even if an adversarial prompt injection bypasses model instructions, Swytchcode's execution layer rejects the tool call before the payload reaches PayPal.",
-      proof: "swy policy check --max-amount 200.00",
-    },
-    {
-      title: "Execution Layer Isolation",
-      subtitle: "Decouples credentials from the model",
-      icon: Key,
-      color: "text-purple-400 bg-purple-500/10 border-purple-500/25",
-      glow: "hover:border-purple-500/35",
-      description:
-        "The model never handles PayPal credentials or raw HTTP headers directly. It interfaces strictly with typed canonical tools, while the CLI handles bearer token caching, SSL verification, and secret redaction.",
-      proof: "swy exec --header 'Authorization=Bearer [MANAGED]'",
-    },
-    {
-      title: "Dual Audit Synchronization",
-      subtitle: "Every action logged to Notion and Slack",
-      icon: Database,
-      color: "text-amber-400 bg-amber-500/10 border-amber-500/25",
-      glow: "hover:border-amber-500/35",
-      description:
-        "Every autonomous resolution, denial, or escalation writes a structured row to the Notion Aegis Ledger database and dispatches a message to Slack. No decision occurs without an audit trace.",
-      proof: "notion.page.create() + slack.chat.postmessage.create()",
-    },
-  ];
-
   return (
     <section id="guardrails" className="py-20 relative z-10 border-t border-white/[0.06]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -75,38 +19,6 @@ export default function GuardrailsSection() {
             Autonomous financial agents require deterministic guardrails at the API boundary,
             not just natural-language prompt instructions that can be bypassed.
           </p>
-        </div>
-
-        {/* 4 Cards Grid with Semantic Colors */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-14">
-          {guardrails.map((g, idx) => {
-            const Icon = g.icon;
-            return (
-              <div
-                key={idx}
-                className={`linear-card p-6 rounded-2xl relative overflow-hidden transition-all ${g.glow}`}
-              >
-                <div className="flex items-center gap-3.5 mb-3.5">
-                  <div className={`p-2.5 rounded-xl border ${g.color}`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-medium text-[#EDEDEF]">{g.title}</h3>
-                    <p className="text-xs text-[#8A8F98] font-mono">{g.subtitle}</p>
-                  </div>
-                </div>
-
-                <p className="text-sm text-[#8A8F98] leading-relaxed mb-4">{g.description}</p>
-
-                <div className="bg-[#050506] rounded-lg p-2.5 border border-white/[0.06] font-mono text-[11px] text-[#EDEDEF] flex items-center justify-between">
-                  <code className="text-[#818cf8] truncate">{g.proof}</code>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 uppercase tracking-wider shrink-0 ml-2">
-                    Enforced
-                  </span>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         {/* Visual Side-by-Side Comparison (Color Science: Red Danger vs. Emerald Safety) */}
@@ -146,7 +58,7 @@ export default function GuardrailsSection() {
                   <X className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="text-red-300 font-medium block">Bypassed by Jailbreaks:</span>
-                    Prompt injection ("CEO override") tricks LLM into releasing $5,000+.
+                    Prompt injection ("CEO override") tricks LLM into releasing ₹5,000+.
                   </div>
                 </div>
 
@@ -192,16 +104,16 @@ export default function GuardrailsSection() {
                 <div className="flex items-start gap-2.5 text-[#8A8F98]">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="text-emerald-300 font-medium block">Hard $200 Math Ceiling:</span>
-                    Swytchcode gateway intercepts calls &gt;$200 regardless of prompt text.
+                    <span className="text-emerald-300 font-medium block">Verification Defeats Injection:</span>
+                    Decision never depends on the prompt's own claims — a fake capture ID is denied no matter what the prompt demands.
                   </div>
                 </div>
 
                 <div className="flex items-start gap-2.5 text-[#8A8F98]">
                   <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="text-emerald-300 font-medium block">Dynamic Idempotency Lock:</span>
-                    Hashes capture ID + amount into key; retries never duplicate payouts.
+                    <span className="text-emerald-300 font-medium block">Dry-Run Guardrail:</span>
+                    Real Swytchcode --dry-run flag — test the full reasoning path with zero live effect.
                   </div>
                 </div>
 
