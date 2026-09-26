@@ -40,6 +40,8 @@ load_dotenv()
 SWYTCHCODE_BIN = os.environ.get("AEGIS_SWY_BIN", "swy")
 SLACK_CHANNEL_ID = os.environ.get("SLACK_CHANNEL_ID", "")
 NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
+JIRA_PROJECT_KEY = os.environ.get("JIRA_PROJECT_KEY", "SCRUM")
+JIRA_TASK_ISSUE_TYPE_ID = os.environ.get("JIRA_TASK_ISSUE_TYPE_ID", "10003")
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +465,58 @@ def notion_log_case(
         return f"NOTION_FAILED: {e}"
 
 
+# ---------------------------------------------------------------------------
+# Jira - auto-file a real engineering ticket when Leak Radar detects a systemic
+# pattern, so it becomes actual tracked work, not just a chat message. Jira Cloud
+# is multi-tenant, so unlike every other integration the endpoint isn't a simple
+# localhost-bug patch - it needs the account's real cloudId (F44).
+# ---------------------------------------------------------------------------
+
+@tool
+def jira_file_bug(summary: str, description: str) -> str:
+    """File a real Jira ticket - use this ONLY when check_leak_pattern reports a
+    PATTERN ALERT (a systemic issue affecting multiple customers), never for a single
+    isolated case. This turns a detected pattern into actual tracked engineering work,
+    not just a notification.
+
+    `summary` should be a short one-line title (e.g. "Systemic $45 overcharge pattern
+    at checkout"). `description` should explain the pattern and cite the case IDs
+    check_leak_pattern returned.
+    """
+    if _DRY_RUN.get():
+        return json.dumps(
+            {
+                "dry_run": True,
+                "would_execute": "jira.api.issue.create",
+                "summary": summary,
+                "note": "No real Jira ticket created - dry-run mode. This is what would happen.",
+            }
+        )
+    payload = {
+        "body": {
+            "fields": {
+                "project": {"key": JIRA_PROJECT_KEY},
+                "summary": summary,
+                "issuetype": {"id": JIRA_TASK_ISSUE_TYPE_ID},
+                "description": {
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": description}]}
+                    ],
+                },
+            }
+        }
+    }
+    try:
+        result = run_swy("jira.api.issue.create", payload)
+        data = result.get("data", {})
+        key = data.get("key", "")
+        return f"Filed Jira ticket {key}: {data.get('self', '')}"
+    except RuntimeError as e:
+        return f"JIRA_FAILED: {e}"
+
+
 ALL_TOOLS = [
     paypal_lookup_capture,
     paypal_refund_capture,
@@ -472,4 +526,5 @@ ALL_TOOLS = [
     paypal_offer_dispute_settlement,
     slack_notify,
     notion_log_case,
+    jira_file_bug,
 ]

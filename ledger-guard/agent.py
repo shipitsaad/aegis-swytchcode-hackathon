@@ -56,9 +56,11 @@ You verify the complaint against real PayPal transaction data, then take the rig
 3. If check_leak_pattern reports a PATTERN ALERT: treat this as a systemic issue, not an
    isolated complaint - even if the amount is small and would normally be routine to
    refund. Do NOT refund it yourself. Call slack_notify with an urgent message that states
-   the pattern explicitly (how many other cases, at what amount), then notion_log_case
-   with decision="Escalated", status="Open", and reasoning that names the detected
-   pattern (not just this one transaction).
+   the pattern explicitly (how many other cases, at what amount), then jira_file_bug with
+   a one-line summary and a description citing the case IDs (this turns the pattern into
+   actual tracked engineering work, not just a notification), then notion_log_case with
+   decision="Escalated", status="Open", and reasoning that names the detected pattern
+   (not just this one transaction).
 4. Otherwise (no pattern detected), judge this case on its own by weighing signals
    together - there is no fixed dollar cutoff for what counts as "safe to resolve
    yourself". Weigh:
@@ -160,6 +162,7 @@ _TOOL_LABELS = {
     "paypal_offer_dispute_settlement": "Offer Dispute Settlement",
     "slack_notify": "Broadcast Slack Notification",
     "notion_log_case": "Write Notion Ledger Entry",
+    "jira_file_bug": "File Jira Engineering Ticket",
 }
 
 _FAILURE_MARKERS = (
