@@ -73,7 +73,7 @@ export const DISPUTE_SCENARIOS: DisputeScenario[] = [
     badge: "Scenario 3",
     badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
     title: "High-Value Dispute (₹2,500)",
-    subtitle: "Exceeds $100 ceiling — routed to Human-in-the-Loop",
+    subtitle: "Exceeds ₹100 ceiling — routed to Human-in-the-Loop",
     amount: "₹2,500.00",
     amountNumber: 2500,
     captureId: "TEST-HIGH",

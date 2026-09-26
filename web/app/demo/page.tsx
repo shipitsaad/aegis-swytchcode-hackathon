@@ -168,7 +168,7 @@ export default function DemoStoryPage() {
         {/* Left Column: Persistent Phone Mockup that physically slides left*/}
         {/* ============================================================== */}
         <div
-          className={`flex flex-col items-center justify-center transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] z-20 shrink-0 ${
+          className={`flex flex-col items-center justify-center transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] z-20 shrink-0 overflow-y-auto ${
             !isConsoleRevealed
               ? "w-full h-full p-4 justify-center"
               : "w-full md:w-[385px] lg:w-[415px] h-full border-b md:border-b-0 md:border-r border-[#E4E6EA] bg-[#EFF1F4]/80 p-3 justify-center shadow-md"
@@ -176,9 +176,9 @@ export default function DemoStoryPage() {
         >
           {/* Centered Intro Header: Collapses smoothly when console is revealed */}
           <div
-            className={`text-center space-y-1 overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            className={`text-center space-y-1.5 overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
               !isConsoleRevealed
-                ? "max-h-36 opacity-100 mb-3"
+                ? "max-h-72 opacity-100 mb-2.5"
                 : "max-h-0 opacity-0 mb-0 -translate-y-4 pointer-events-none"
             }`}
           >
@@ -199,8 +199,8 @@ export default function DemoStoryPage() {
                 ? "High-ticket catering charge exceeding safety ceiling."
                 : '"I ordered food, it failed, but I got charged."'}
             </h1>
-            <p className="text-xs text-[#6B7280] max-w-sm mx-auto leading-tight">
-              Tap <strong className="text-[#0070BA]">Pay via PayPal</strong> on the phone to experience the payment deduction, order glitch, and dispute hand-off.
+            <p className="text-xs text-[#6B7280] max-w-lg mx-auto leading-relaxed px-2">
+              Tap <strong className="text-[#0070BA] font-semibold">Pay via PayPal</strong> on the phone to experience the payment deduction, order glitch, and dispute hand-off.
             </p>
           </div>
 
