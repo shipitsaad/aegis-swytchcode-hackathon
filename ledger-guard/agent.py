@@ -15,6 +15,11 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
 
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:
+    ChatGoogleGenerativeAI = None
+
 from tools import ALL_TOOLS, notion_log_case as _notion_log_case_tool
 from tools import _DRY_RUN
 
@@ -41,7 +46,10 @@ you're in first:
    if notion_log_case was not actually invoked as a tool call, the case is not done, no
    matter what your final message says. Make a `case_id` yourself for each case (e.g.
    based on the capture/dispute ID or a short slug) - it just needs to be unique and
-   traceable.
+   traceable. Also identify the customer as a `customer_id` - their email if the complaint
+   gives one, else their name, else the literal string "unknown". Use the exact same
+   `customer_id` for the same person every time (this is how repeat-customer patterns get
+   caught), and always pass it to notion_log_case.
 
 ## BILLING COMPLAINT POLICY
 
@@ -53,20 +61,43 @@ You verify the complaint against real PayPal transaction data, then take the rig
 2. ALWAYS call check_leak_pattern with the verified amount next, before deciding anything
    else. This tells you whether other customers have recently logged complaints at this
    same amount - a sign of a systemic bug, not one customer's isolated mistake.
-3. If check_leak_pattern reports a PATTERN ALERT: treat this as a systemic issue, not an
+3. ALWAYS call check_customer_pattern with this customer's `customer_id` next, before
+   deciding anything else. This is a different signal from check_leak_pattern - it catches
+   the SAME customer filing refund/return claims again and again (a "serial returner"),
+   the kind of thing a real business analyst watches for, not a systemic bug.
+3b. If (and only if) the complaint is specifically that the product/order never arrived or
+    was never delivered - not just a billing/amount dispute - ALSO call
+    check_delivery_status with the order/capture ID before deciding. paypal_lookup_capture
+    only proves the payment moved correctly; it says nothing about whether the item itself
+    showed up. Weigh what it returns as a real signal: DELIVERED contradicts a non-receipt
+    claim (treat like a data contradiction), NOT DELIVERED supports it, NO RECORD is
+    inconclusive - one more signal, not a final answer either way.
+4. If check_leak_pattern reports a PATTERN ALERT: treat this as a systemic issue, not an
    isolated complaint - even if the amount is small and would normally be routine to
-   refund. Do NOT refund it yourself. Call slack_notify with an urgent message that states
-   the pattern explicitly (how many other cases, at what amount), then jira_file_bug with
+   refund. Do NOT refund it yourself. Call slack_notify (category="systemic_alert") with an
+   urgent message that states the pattern explicitly (how many other cases, at what
+   amount), then jira_file_bug with
    a one-line summary and a description citing the case IDs (this turns the pattern into
    actual tracked engineering work, not just a notification), then notion_log_case with
    decision="Escalated", status="Open", and reasoning that names the detected pattern
    (not just this one transaction).
-4. Otherwise (no pattern detected), judge this case on its own by weighing signals
+5. Otherwise, if check_customer_pattern reports a CUSTOMER PATTERN ALERT: treat this as a
+   customer-behavior issue for the business to review, not a bug - even if this specific
+   case looks perfectly legitimate verified on its own. Do NOT resolve it yourself. Call
+   slack_notify (category="customer_alert") naming the customer and how many recent cases
+   they have, then jira_file_bug
+   with a summary like "Repeat refund pattern - <customer_id>, N cases in <window>" and a
+   description citing the case IDs (clearly distinct from a systemic-bug ticket - this is
+   about one customer's behavior, not a broken system), then notion_log_case with
+   decision="Escalated", status="Open", reasoning naming the repeat-customer pattern.
+6. Otherwise (no pattern of either kind), judge this case on its own by weighing signals
    together - there is no fixed dollar cutoff for what counts as "safe to resolve
    yourself". Weigh:
    - **Verification confidence**: does PayPal's data clearly and specifically confirm
      what the customer described (matching amount, matching status), only loosely fit,
-     or actively contradict it (wrong amount, no such capture, already refunded)?
+     or actively contradict it (wrong amount, no such capture, already refunded)? If you
+     called check_delivery_status, fold its result in the same way - DELIVERED against a
+     non-receipt claim is a real contradiction, not just a low-confidence story.
    - **Amount at stake, as a sliding scale, not a line**: bigger amounts deserve more
      caution, but as one input among several - a confidently-verified few-hundred-dollar
      duplicate charge can be safer to resolve than a shaky, vague claim for $50. Treat
@@ -81,14 +112,16 @@ You verify the complaint against real PayPal transaction data, then take the rig
      to escalating for a human to look at, rather than guessing.
    Then act on the weighing:
    - Confident, verified, plausible, and low-risk to resolve yourself: call
-     paypal_refund_capture, then slack_notify a short summary, then notion_log_case with
-     decision="Refunded".
+     paypal_refund_capture, then slack_notify (category="refunded") a short summary, then
+     notion_log_case with decision="Refunded".
    - The verified data actively contradicts the story: do NOT refund. Call slack_notify
-     explaining why the claim doesn't hold up, then notion_log_case with decision="Denied".
+     (category="denied") explaining why the claim doesn't hold up, then notion_log_case
+     with decision="Denied".
    - Anything else - genuinely uncertain, a larger amount, an unusual combination of
      signals, or verification that's inconclusive rather than contradictory: do NOT refund
-     it yourself. Call slack_notify to flag it for a human to review, then notion_log_case
-     with decision="Escalated" and status="Open" (all other cases get status="Resolved").
+     it yourself. Call slack_notify (category="escalated") to flag it for a human to
+     review, then notion_log_case with decision="Escalated" and status="Open" (all other
+     cases get status="Resolved").
    State explicitly, in your reasoning, which specific signals drove the decision - not
    just a number you checked against.
 ## DISPUTE POLICY
@@ -109,16 +142,17 @@ D2. Weigh signals together, the same way as billing complaints - no fixed rule:
       with a clean, low-risk reason is safer to resolve than one that's ambiguous, high
       -value, or where you're not genuinely confident.
 D3. Low-risk and clearly the business's fault to make right: call paypal_accept_dispute,
-    then slack_notify, then notion_log_case with decision="Refunded".
+    then slack_notify (category="refunded"), then notion_log_case with decision="Refunded".
 D4. Genuine partial merit - real fault on both sides, or the customer's ask exceeds what's
     warranted: call paypal_offer_dispute_settlement with a fair reduced amount and a clear
-    note explaining the offer, then slack_notify, then notion_log_case - use the exact
-    string "Settled" for `decision` here (not "Refunded"), so a partial settlement is
-    distinguishable in the ledger from a full refund.
+    note explaining the offer, then slack_notify (category="settled"), then notion_log_case
+    - use the exact string "Settled" for `decision` here (not "Refunded"), so a partial
+    settlement is distinguishable in the ledger from a full refund.
 D5. Looks like fraud, is high-value, or you're not confident enough to resolve it alone
     (e.g. UNAUTHORIZED transactions almost always land here): do NOT call
-    paypal_accept_dispute or paypal_offer_dispute_settlement. Just slack_notify to flag it
-    for a human, then notion_log_case with decision="Escalated", status="Open".
+    paypal_accept_dispute or paypal_offer_dispute_settlement. Just slack_notify
+    (category="escalated") to flag it for a human, then notion_log_case with
+    decision="Escalated", status="Open".
 
 Be decisive. Explain your reasoning briefly before each tool call so a human watching \
 can follow why you did what you did, then act.
@@ -126,6 +160,12 @@ can follow why you did what you did, then act.
 
 
 def build_agent():
+    # Gemini fallback DISABLED for the live demo (2026-09-26, mid-round): both fallback
+    # orderings caused real problems under load - Groq-primary caused ~70s mid-run
+    # provider switches ("dropping reasoning block" replay mismatch), Gemini-primary
+    # hung completely (90s+, no response, no error). Groq alone is the only config
+    # proven to complete every request today, even when it 429s (fails fast and clean,
+    # never hangs). Revisit post-event, not mid-demo.
     model = ChatGroq(model="openai/gpt-oss-120b", temperature=0)
     return create_react_agent(model, tools=ALL_TOOLS, prompt=SYSTEM_PROMPT)
 
@@ -157,6 +197,8 @@ _TOOL_LABELS = {
     "paypal_lookup_capture": "PayPal Capture Verification",
     "paypal_refund_capture": "Execute PayPal Refund",
     "check_leak_pattern": "Leak Radar: Cluster Check",
+    "check_customer_pattern": "Repeat-Customer Pattern Check",
+    "check_delivery_status": "Delivery Status Check",
     "paypal_lookup_dispute": "PayPal Dispute Lookup",
     "paypal_accept_dispute": "Accept PayPal Dispute",
     "paypal_offer_dispute_settlement": "Offer Dispute Settlement",
@@ -173,6 +215,20 @@ _FAILURE_MARKERS = (
     "ACCEPT_DISPUTE_FAILED",
     "OFFER_SETTLEMENT_FAILED",
 )
+
+# Tools that actually move money, message someone, or write a permanent record - these
+# are the ones a co-pilot draft holds back on `--dry-run` and a human must approve
+# before they run for real. Lookups (paypal_lookup_capture, paypal_lookup_dispute,
+# check_leak_pattern) always run live regardless of dry-run - they're read-only, so
+# verification already happened for real by the time a draft is shown for approval.
+MUTATING_TOOLS = {
+    "paypal_refund_capture",
+    "paypal_accept_dispute",
+    "paypal_offer_dispute_settlement",
+    "slack_notify",
+    "notion_log_case",
+    "jira_file_bug",
+}
 
 
 def _infer_status(content: str) -> str:
@@ -231,6 +287,7 @@ def run_agent_structured(complaint: str, dry_run: bool = False) -> dict:
                         "status": "running",
                         "timestamp": elapsed(),
                         "detail": f"Calling with {json.dumps(call['args'])}",
+                        "args": call["args"],
                     }
                     steps.append(step)
                     pending_by_call_id[call["id"]] = step
@@ -277,21 +334,22 @@ def run_agent_structured(complaint: str, dry_run: bool = False) -> dict:
             decision = parsed.get("decision")
             reasoning_text = parsed.get("reasoning", final_reasoning)
             status = parsed.get("status", "Resolved")
-            log_result = _notion_log_case_tool.invoke(
-                {
-                    "case_id": case_id,
-                    "amount": amount,
-                    "decision": decision,
-                    "reasoning": reasoning_text,
-                    "status": status,
-                }
-            )
+            recovered_args = {
+                "case_id": case_id,
+                "amount": amount,
+                "decision": decision,
+                "reasoning": reasoning_text,
+                "status": status,
+                "customer_id": parsed.get("customer_id", "unknown"),
+            }
+            log_result = _notion_log_case_tool.invoke(recovered_args)
             steps.append(
                 {
                     "id": "auto-recovered-notion-log",
                     "name": "Write Notion Ledger Entry (auto-recovered)",
                     "tool": "notion_log_case",
                     "status": _infer_status(log_result),
+                    "args": recovered_args,
                     "timestamp": elapsed(),
                     "detail": (
                         "The agent produced this log entry as text instead of calling the "
@@ -309,6 +367,15 @@ def run_agent_structured(complaint: str, dry_run: bool = False) -> dict:
 
     _DRY_RUN.reset(dry_run_token)
 
+    # The exact mutating tool calls Aegis decided on, in order, with their real args -
+    # everything a co-pilot approval needs to replay for real later, without re-invoking
+    # the LLM (avoids a second Groq call and any chance it decides differently on retry).
+    pending_actions = [
+        {"tool": s["tool"], "args": s.get("args", {})}
+        for s in steps
+        if s["tool"] in MUTATING_TOOLS
+    ]
+
     return {
         "steps": steps,
         "final_reasoning": final_reasoning,
@@ -318,6 +385,7 @@ def run_agent_structured(complaint: str, dry_run: bool = False) -> dict:
         "slack_text": slack_text,
         "notion_row": notion_row,
         "dry_run": dry_run,
+        "pending_actions": pending_actions,
     }
 
 

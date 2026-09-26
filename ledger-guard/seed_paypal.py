@@ -29,11 +29,18 @@ PENDING_FILE = "seed_orders_pending.json"
 OUTPUT_FILE = "seed_transactions.json"
 
 
-def create_order(amount: str) -> dict:
+def create_order(amount: str, label: str = "") -> dict:
     body = {
         "intent": "CAPTURE",
-        "purchase_units": [{"amount": {"currency_code": "USD", "value": amount}}],
+        "purchase_units": [
+            {
+                "amount": {"currency_code": "USD", "value": amount},
+                "custom_id": label,
+                "invoice_id": f"AEGIS-{label}" if label else None,
+            }
+        ],
     }
+    body["purchase_units"][0] = {k: v for k, v in body["purchase_units"][0].items() if v}
     result = _paypal_exec(
         "orders.checkout.orders.create",
         {"body": body},
@@ -55,7 +62,7 @@ def step_create():
     pending = []
     for seed in SEEDS:
         print(f"Creating order for {seed['label']} (${seed['amount']})...")
-        order = create_order(seed["amount"])
+        order = create_order(seed["amount"], label=seed["label"])
 
         if "id" not in order:
             print(f"  FAILED: {json.dumps(order, indent=2)}")

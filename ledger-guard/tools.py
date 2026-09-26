@@ -192,6 +192,108 @@ def check_leak_pattern(amount: float, window_minutes: int = 60) -> str:
     )
 
 
+@tool
+def check_customer_pattern(customer_id: str, window_days: int = 30) -> str:
+    """Check whether this SAME customer has filed multiple refund/return/dispute cases
+    recently - the "serial returner" pattern a real business analyst watches for (someone
+    who orders, uses, and returns repeatedly), as opposed to check_leak_pattern's "same
+    amount, different customers" systemic-bug pattern. A customer with a long recent history
+    of claims may need a human/business policy decision, not another automatic resolution -
+    even if this specific case looks perfectly legitimate on its own.
+
+    Call this AFTER identifying the customer (their email if given, else their name) and
+    BEFORE deciding what to do, right alongside check_leak_pattern.
+
+    Pass "unknown" for customer_id if the complaint gives you no name or email to identify
+    them by - that's expected sometimes, and this check will just report nothing found.
+
+    Returns how many other logged cases in the last `window_days` days belong to this same
+    customer, and what happened in each. Two or more prior cases (this would be the 3rd+)
+    means a repeat pattern worth flagging, not three unrelated coincidences.
+    """
+    if not customer_id or customer_id.strip().lower() == "unknown":
+        return "No customer identifier given - can't check for a repeat-customer pattern."
+
+    history = _load_case_history()
+    cutoff = time.time() - (window_days * 86400)
+    needle = customer_id.strip().lower()
+    matches = [
+        entry
+        for entry in history
+        if entry.get("timestamp", 0) >= cutoff
+        and entry.get("customer_id", "").strip().lower() == needle
+    ]
+    if len(matches) >= 2:
+        summary = ", ".join(f"{m['case_id']} ({m.get('decision', '?')})" for m in matches)
+        return (
+            f"CUSTOMER PATTERN ALERT: {customer_id} has {len(matches)} other logged case(s) "
+            f"in the last {window_days} days: {summary}. This looks like a repeat pattern "
+            f"worth flagging to the business, not something to just quietly resolve again."
+        )
+    return (
+        f"No repeat-customer pattern - only {len(matches)} other case(s) for {customer_id} "
+        f"in the last {window_days} days."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Delivery status - closes a real gap: paypal_lookup_capture only verifies the PAYMENT
+# side (does the capture exist, right amount/status). It has no idea whether the product
+# itself was actually delivered, so a customer claiming "I never received it" couldn't be
+# checked against anything - only judged on plausibility. This tool gives that a real,
+# independent signal to weigh, same status Aegis would ask the merchant's own order-
+# management/shipping system for.
+#
+# TEST DATA for the hackathon demo (`order_status.json`, same transparent pattern as
+# `_TEST_OVERRIDES` above) - checked whether Swytchcode has a real order/shipping provider
+# first (it has `PayPal.shipping_shipment_tracking_v1`, but our sandbox app's OAuth token
+# lacks the tracking scope - a real PayPal-side permission gate, not a Swytchcode bug, see
+# docs/05-FINDINGS.md F46). In a real deployment, `_lookup_order_status` below is the only
+# function that would change - swapped for a real query to the merchant's own order
+# database (Shopify, a courier tracking API, a plain SQL/Mongo order table, whatever they
+# already run) - every caller of check_delivery_status stays exactly the same.
+# ---------------------------------------------------------------------------
+
+_ORDER_STATUS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "order_status.json")
+
+
+def _lookup_order_status(order_id: str) -> dict | None:
+    """The one function a real deployment would replace - reads a local test file here,
+    would query the merchant's real order/shipping system there. Everything that calls
+    this (just check_delivery_status below) is unaffected by that swap."""
+    try:
+        with open(_ORDER_STATUS_PATH, "r") as f:
+            records = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    return records.get(order_id)
+
+
+@tool
+def check_delivery_status(order_id: str) -> str:
+    """Check whether an order/capture was actually delivered - use this ONLY when the
+    complaint is specifically about the product never arriving or not being delivered
+    (not a plain billing/amount dispute, which paypal_lookup_capture already covers).
+
+    This is a second, independent signal beyond payment verification: paypal_lookup_capture
+    can only confirm money moved correctly, not whether the item itself showed up. If this
+    reports delivered=true but the customer claims non-receipt, treat that as a real
+    contradiction, the same way you'd treat mismatched payment data. If delivered=false,
+    that supports the customer's claim. If there's no record at all, treat it as
+    inconclusive - one more signal to weigh, not a final answer either way.
+    """
+    record = _lookup_order_status(order_id)
+    if record is None:
+        return f"NO DELIVERY RECORD found for {order_id} - can't confirm or deny delivery from this alone."
+    if record.get("delivered"):
+        return (
+            f"DELIVERED - {order_id} was marked delivered on {record.get('delivered_at', 'an earlier date')} "
+            f"via {record.get('carrier', 'the carrier')}. This contradicts a non-receipt claim."
+        )
+    status = record.get("status", "not yet delivered")
+    return f"NOT DELIVERED - {order_id} status: {status}. This supports a non-receipt claim."
+
+
 # TEMPORARY dev-only overrides, so we can test the refund/escalate branches tonight
 # without a real approved PayPal payment (the sandbox checkout UI is being finicky -
 # see docs/03-LOG.md ~19:00 IST). Getting a genuinely live captured payment is a
@@ -200,6 +302,7 @@ def check_leak_pattern(amount: float, window_minutes: int = 60) -> str:
 _TEST_OVERRIDES = {
     "TEST-SMALL": {"id": "TEST-SMALL", "status": "COMPLETED", "amount": {"value": "45.00", "currency_code": "USD"}},
     "TEST-LARGE": {"id": "TEST-LARGE", "status": "COMPLETED", "amount": {"value": "350.00", "currency_code": "USD"}},
+    "TEST-DELIVERED": {"id": "TEST-DELIVERED", "status": "COMPLETED", "amount": {"value": "60.00", "currency_code": "USD"}},
 }
 
 
@@ -376,23 +479,53 @@ def paypal_offer_dispute_settlement(dispute_id: str, amount: float, note: str) -
 # managed connection's own bot - see docs/05-FINDINGS.md F26).
 # ---------------------------------------------------------------------------
 
+# Icon + color per message category, using Slack's real legacy `attachments` color bar
+# (confirmed live: Slack accepts a JSON-encoded attachments string with a hex `color` and
+# renders both the color bar and the emoji for real - not just cosmetic text prefixing).
+_SLACK_CATEGORY_STYLE = {
+    "refunded": {"emoji": "✅", "color": "#2eb886"},        # green
+    "denied": {"emoji": "🚫", "color": "#e01e5a"},          # red
+    "settled": {"emoji": "🤝", "color": "#ecb22e"},         # amber
+    "escalated": {"emoji": "🔺", "color": "#ecb22e"},       # amber - routine human review
+    "systemic_alert": {"emoji": "🚨", "color": "#e01e5a"},  # red - Leak Radar, urgent
+    "customer_alert": {"emoji": "🔁", "color": "#ecb22e"},  # amber - repeat-customer pattern
+    "info": {"emoji": "ℹ️", "color": "#5E6AD2"},            # default, no strong signal
+}
+
+
 @tool
-def slack_notify(text: str) -> str:
+def slack_notify(text: str, category: str = "info") -> str:
     """Post a message to the team's Slack channel - use this to notify the team about
     an escalation, a large refund, or anything a human should know about.
+
+    `category` picks the icon and color bar so the channel is easy to scan at a glance -
+    must be one of: "refunded", "denied", "settled", "escalated" (routine human review),
+    "systemic_alert" (Leak Radar - same amount, many customers, urgent), "customer_alert"
+    (same customer, repeat pattern), or "info" if none of those fit. Match it to the
+    decision you're about to log with notion_log_case.
     """
+    style = _SLACK_CATEGORY_STYLE.get(category, _SLACK_CATEGORY_STYLE["info"])
+    formatted_text = f"{style['emoji']} {text}"
+
     if _DRY_RUN.get():
         return json.dumps(
             {
                 "dry_run": True,
                 "would_execute": "slack.chat.postmessage.create",
-                "text": text,
+                "text": formatted_text,
+                "category": category,
                 "note": "No real Slack message sent - dry-run mode.",
             }
         )
     payload = {
         "token": "placeholder",  # required by validation, value is unused (F26)
-        "body": {"channel": SLACK_CHANNEL_ID, "text": text},
+        "body": {
+            "channel": SLACK_CHANNEL_ID,
+            "text": formatted_text,  # fallback for clients/notifications that skip attachments
+            "attachments": json.dumps(
+                [{"color": style["color"], "text": formatted_text, "fallback": formatted_text}]
+            ),
+        },
     }
     try:
         result = run_swy("slack.chat.postmessage.create", payload)
@@ -408,13 +541,21 @@ def slack_notify(text: str) -> str:
 
 @tool
 def notion_log_case(
-    case_id: str, amount: float, decision: str, reasoning: str, status: str
+    case_id: str,
+    amount: float,
+    decision: str,
+    reasoning: str,
+    status: str,
+    customer_id: str = "unknown",
 ) -> str:
     """Log a resolved or escalated case to the Aegis Ledger in Notion, permanently
     recording what happened. Always call this exactly once per case, as the last step.
 
     `decision` must be one of: "Refunded", "Denied", "Escalated".
     `status` must be one of: "Open", "Resolved".
+    `customer_id` should be the customer's email if the complaint gave one, else their
+    name, else "unknown" - this is what check_customer_pattern uses to spot a repeat
+    customer across cases, so use the exact same identifier for the same person every time.
     """
     if _DRY_RUN.get():
         return json.dumps(
@@ -426,14 +567,15 @@ def notion_log_case(
                 "decision": decision,
                 "reasoning": reasoning,
                 "status": status,
+                "customer_id": customer_id,
                 "note": (
                     "No real Notion row created, and nothing was added to Leak Radar's "
                     "history - dry-run mode."
                 ),
             }
         )
-    # Recorded regardless of whether the Notion call below succeeds - Leak Radar's
-    # pattern detection must not depend on Notion's API being up.
+    # Recorded regardless of whether the Notion call below succeeds - Leak Radar's and
+    # check_customer_pattern's pattern detection must not depend on Notion's API being up.
     _append_case_history(
         {
             "case_id": case_id,
@@ -441,10 +583,17 @@ def notion_log_case(
             "decision": decision,
             "reasoning": reasoning,
             "status": status,
+            "customer_id": customer_id,
             "timestamp": time.time(),
         }
     )
 
+    # Notion's own database schema was created by hand in the UI (F28) with a fixed set of
+    # columns - rather than guess it has (or add) a "Customer" property and risk the write
+    # failing, fold the identifier into the existing free-text Reasoning field instead.
+    reasoning_for_notion = (
+        f"[Customer: {customer_id}] {reasoning}" if customer_id and customer_id != "unknown" else reasoning
+    )
     payload = {
         "body": {
             "parent": {"database_id": NOTION_DATABASE_ID},
@@ -452,7 +601,7 @@ def notion_log_case(
                 "Case ID": {"title": [{"text": {"content": case_id}}]},
                 "Amount": {"number": amount},
                 "Decision": {"select": {"name": decision}},
-                "Reasoning": {"rich_text": [{"text": {"content": reasoning}}]},
+                "Reasoning": {"rich_text": [{"text": {"content": reasoning_for_notion}}]},
                 "Status": {"select": {"name": status}},
             },
         }
@@ -521,6 +670,8 @@ ALL_TOOLS = [
     paypal_lookup_capture,
     paypal_refund_capture,
     check_leak_pattern,
+    check_customer_pattern,
+    check_delivery_status,
     paypal_lookup_dispute,
     paypal_accept_dispute,
     paypal_offer_dispute_settlement,
